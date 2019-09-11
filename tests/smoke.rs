@@ -172,6 +172,10 @@ struct Project {
 
 impl Project {
     fn new(name: &'static str) -> Result<Self> {
+        Self::new_in(std::env::temp_dir(), name)
+    }
+
+    fn new_in(dir: PathBuf, name: &'static str) -> Result<Self> {
         const JSON: &'static str = r#"
 {
     "arch": "arm",
@@ -186,7 +190,7 @@ impl Project {
 }
 "#;
 
-        let td = TempDir::new("xargo").chain_err(|| "couldn't create a temporary directory")?;
+        let td = TempDir::new_in(dir, "xargo").chain_err(|| "couldn't create a temporary directory")?;
 
         xargo()?
             .args(&["init", "--lib", "--vcs", "none", "--name", name])
@@ -355,6 +359,32 @@ fn target_dependencies() {
         project.xargo_toml(
             r#"
 [target.thumbv7m-none-eabi.dependencies.alloc]
+"#,
+        )?;
+        project.build(TARGET)?;
+        assert!(exists("core", TARGET)?);
+        assert!(exists("alloc", TARGET)?);
+
+        Ok(())
+    }
+
+    run!()
+}
+
+/// Test building a dependency specified as `target.{}.dependencies` in
+/// ../Xargo.toml
+#[cfg(feature = "dev")]
+#[test]
+fn target_dependencies_parentdir() {
+    fn run() -> Result<()> {
+        // need this exact target name to get the right gcc flags
+        const TARGET: &'static str = "thumbv7m-parent-eabi";
+
+        let td = TempDir::new("xargo").chain_err(|| "couldn't create a temporary directory")?;
+        let project = Project::new_in(td.path().to_path_buf(), TARGET)?;
+        write(&td.path().join("Xargo.toml"), false,
+            r#"
+[target.thumbv7m-parent-eabi.dependencies.alloc]
 "#,
         )?;
         project.build(TARGET)?;
